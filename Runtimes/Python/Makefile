@@ -10,3 +10,4 @@ release: src/main.c
 
 clean:
 	rm -rf bin
+
