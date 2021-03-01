@@ -1,10 +1,12 @@
-all: clean build
+all: clean debug
 
-build: src/main.c
+debug: src/main.c
 	mkdir -p bin
-	cd src
-	gcc main.c -o ../bin/main.exe
-	cd ..
+	cd src && gcc main.c -g -o ../bin/main.exe
+
+release: src/main.c
+	mkdir -p bin
+	cd src && gcc main.c -o ../bin/main.exe
 
 clean:
 	rm -rf bin

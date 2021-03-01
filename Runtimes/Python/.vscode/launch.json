@@ -6,12 +6,13 @@
     "configurations": [
         {
             "name": "(gdb) Launch",
+            "preLaunchTask": "Build Makefile",
             "type": "cppdbg",
             "request": "launch",
-            "program": "bin/main.exe",
+            "program": "${workspaceFolder}/bin/main.exe",
             "args": [],
             "stopAtEntry": false,
-            "cwd": "${workspaceFolder}",
+            "cwd": "${workspaceFolder}/bin",
             "environment": [],
             "externalConsole": false,
             "MIMode": "gdb",
