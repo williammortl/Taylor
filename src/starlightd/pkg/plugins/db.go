@@ -11,3 +11,10 @@ type pluginRecord struct {
 	Filename string
 	Handle   *plugin.Plugin
 }
+
+type pluginRecordsKey struct {
+	Name    string
+	Version string
+}
+
+var pluginRecords map[pluginRecordsKey]pluginRecord = make(map[pluginRecordsKey]pluginRecord)

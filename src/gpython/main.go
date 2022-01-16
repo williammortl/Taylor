@@ -16,8 +16,6 @@ import (
 	"runtime/pprof"
 	"strings"
 
-	"github.com/williammortl/Taylor/src/starlightd/pkg/starlightdint"
-
 	_ "github.com/williammortl/Taylor/src/gpython/builtin"
 	"github.com/williammortl/Taylor/src/gpython/compile"
 	"github.com/williammortl/Taylor/src/gpython/marshal"
@@ -30,8 +28,6 @@ import (
 
 // Globals
 var (
-	// Flags
-	debug      = flag.Bool("d", false, "Print lots of debugging")
 	cpuprofile = flag.String("cpuprofile", "", "Write cpu profile to file")
 )
 
@@ -44,16 +40,6 @@ A python implementation in Go
 Full options:
 `)
 	flag.PrintDefaults()
-}
-
-// Exit with the message
-func fatal(message string, args ...interface{}) {
-	if !strings.HasSuffix(message, "\n") {
-		message += "\n"
-	}
-	syntaxError()
-	fmt.Fprintf(os.Stderr, message, args...)
-	os.Exit(1)
 }
 
 func main() {
@@ -122,14 +108,4 @@ func main() {
 	// fmt.Printf("Return = %v\n", res)
 	_ = res
 
-}
-
-//export TaylorPlugin
-func GetTaylorPluginInfo() starlightdint.TaylorPluginInfo {
-	return starlightdint.TaylorPluginInfo{
-		"GPython",
-		"0.0.3",
-		"Python",
-		"3.4.0",
-	}
 }
