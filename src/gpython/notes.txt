@@ -1,0 +1,445 @@
+Code Quality
+============
+
+  * errchk ./...
+  * go vet ./...
+
+IDEA replace all .(cast) with CheckExactString or whatever python calls it...
+
+Then can use CheckString later...
+
+Instead of using TypeCall etc, just implement all the __methods__ for
+Type.  Then there is one and only one way of calling the __methods__.
+
+How subclass a builtin type? Methods etc should work fine, but want
+CheckString to return the "string" out of the superclass.
+
+Things to do before release
+===========================
+
+  * Line numbers
+    * frame.Lasti is pointing past the instruction which puts tracebacks out
+  * Subclass builtins
+  * pygen
+  * consider whether to re-use the grumpy runtime
+
+FIXME recursive types for __repr__ in list, dict, tuple
+>>> L=[0]
+>>> L[0]=L
+>>> L
+[[...]]
+
+Features
+========
+
+  * lexes, parses and compiles all the py3 source in the python distribution
+
+find /usr/lib/python3.4 /usr/lib/python3/ -type f -name \*.py  | xargs testparser
+Failes on /usr/lib/python3/dist-packages/mpmath/usertools.py
+- DOS mode problem
+
+Limitations & Missing parts
+===========================
+  * string keys only in dictionaries
+  * \N{...} escapes not implemented
+  * lots of builtins still to implement
+  * FIXME eq && ne should throw an error for a type which doesn' have eq implemented
+  * repr/str
+  * subclassing built in types - how? Need to make sure we have called the appropriate method everywhere rather than just .(String)
+  * FIXME how do mapping types work?
+    * PyMapping_Check
+    * is it just an interface?
+  * name mangling for private attributes in classes
+
+Type ideas
+==========
+
+  * Embed a zero sized struct with default implementations of all the methods to avoid interface bloat
+    * would have a pointer to the start of the object so could do comparisons
+    * however don't know anything about the object - can't call Type() for instance
+      * could possibly use non-empty struct { *Type } and get that to provide Type() method
+    * except for String/Int/Bool/Tuple/Float/Bytes and possibly some others...
+    * can embed this default interface whether we do fat interfaces or not...
+    * can have heirachies of embedding
+
+  * Make Object a fat interface so it defines all the M__method__ or at least all the common ones
+    * would make the M__call__ quicker than needing a type assertion
+  * Or Make the methods be pointers in *Type more like python
+    * Closer to the way python does it and would be faster than type assertion
+    * Function pointers would have to be func(a Object) (Object,
+      error) which would mean a type assertion which we are trying to
+      avoid :-(
+    * An interface is the go way of doing this
+
+What methods are a default implementation useful for?
+  __eq__
+  __ne__
+  __repr__
+  __str__
+  __lt__ __add__ etc - could return NotImplemented
+  __hash__ - based on pointer?
+
+Minimum set of methods / attributes (eg on None)
+
+Attributes
+
+__class__
+__doc__
+
+Methods
+
+__bool__
+__delattr__
+__dir__
+__format__
+__getattribute__
+__hash__
+__init__
+__new__
+__reduce__     - pickle protocol - missing!
+__reduce_ex__  - pickle protocol - missing!
+__repr__
+__setattr__
+__sizeof__     - missing from py.go
+__str__
+__subclasshook__ - missing from py.go
+
+Comparison
+
+__eq__
+__ge__
+__gt__
+__le__
+__lt__
+__ne__
+
+dict
+====
+
+Implementation notes
+
+Implement __hash__.  This should return an Int which in turn will
+convert to an int64 (either a py.Int or a py.BigInt.Int64()).  Make
+py.BigInt.M__hash__ return a Py.Int and can use that to squash
+the return when it is an BigInt.
+
+dict should have a .StringDict() method so can convert easily for
+argument passing etc.
+
+Maybe dict should contain a StringDict() so if py.CheckString(Exact?)
+then can use the embedded StringDict which is what the majority of
+dict access is.  Might complicate other things though.
+
+Basic implementation is map[int64][]struct{key, value Object} where
+int64 is the hash. Types must implement __hash__ and __eq__ to be a
+key in a dict.
+
+Would be much faster if __eq__ and __hash__ were on all types!
+
+Idea: Each slice of objects in dictionary or set can be a SimpleDict
+or SimpleSet which is an O(n**2) Dict or Set. This could be the
+implementation for a few elements also if we can figure out how to
+switch implementation on the fly. Maybe with an interface...
+
+Would like to be able to switch implementation on the fly from
+StringDict to SimpleDict to full Dict. Can we define an interface to
+make that possible? A dict type then becomes a pointer to an
+interface, or probably better a pointer to a struct with a mutex and a
+pointer to an interface.
+
+
+Lookup what go uses as hash key eg int and use that for gpython.
+Perhaps use a little bit of assembler to export the go hash routine.
+
+
+genpy
+=====
+
+Code automation to help with the boilerplate of making types and modules
+
+  * For modules
+    * instrospect code
+    * make module table
+    * fill in arguments 
+    * fill in docstr (from comments)
+    * Module methods should be exportable with capital letter
+
+  * For a type
+    * create getters/setters from struct comments
+    * create default implementations 
+    * independent of use 0 sized embedded struct idea
+
+
+Todo
+====
+
+FIXME move the whole of Vm into Frame! Perhaps decode the extended args inline.
+
+Speedup
+
+  * Getting rid of panic/defer error handling
+
+Speed 35% improvement
+Before 2430 pystone/s
+After 3278 pystone/s
+
+After compile debug out with a constant 9293 pystones/s + 180%
+Keep locals 9789 local 5% improvement
+
+Still to do
+  * think about exception handling - do nested tracebacks work?
+    * write a test for it!
+  * Make exception catching only catch py objects?
+    * perhaps make it convert go io errors into correct py error etc
+  * stop panics escaping symtable package
+
+CAN now inline the do_XXX functions into the EvalFrame which will probably speed things up!
+  * also make vm.STACK into frame.STACK and keep a pointer to frame
+  * probably makes vm struct redundant? move its contents as locals.
+  * move frame into vm module? Then can't use *Frame in
+  * tried this - was 20% slower
+
+  * Write go module
+    * "go" command which is go(fn, args, kwargs) - implement with a builtin special in the interpreter probably
+    * "chan" to make a channel with methods get and put
+    * "select" - no idea how to implement!
+    * "mutex"
+
+FIXME need to be able to tell classes an instances apart!
+
+Put C modules in sub directory
+Make an all submodule so can insert all of them easily with 
+
+  import _ "github.com/williammortl/Taylor/src/gpython/stdlib/all"
+
+Factor main code into submodule so gpython is minimal.
+
+Make a gpython-minimal with no built in stdlib
+
+Bytecode compile the standard library and embed into go files - can then make a gpython with no external files.
+
+NB Would probably be a lot quicker to define
+
+Arg struct {
+    Name string
+    Value Object
+}
+
+And pass args using []Arg instead of StringDict
+
+Compiler
+========
+
+Complete but without optimisation.
+
+Easy wins
+  * Constant folding, eg -1 is LOAD_CONST 1; NEGATE
+  * Jump optimisation - compiler emits lots of jumps to jumps
+
+Testing
+=======
+
+  python3 -m dis hello.py
+  python3 -mcompileall hello.py 
+  mv __pycache__/hello.cpython-33.pyc hello.pyc
+  python3 -c 'import hello; import dis; dis.dis(hello.fn)'
+
+  go build ./... && go build
+  ./gpython hello.pyc
+
+When converting C code, run it through astyle first as a first pass
+
+astyle --style=java --add-brackets < x.c > x.go
+
+Note: clang-tidy can force all if/while/for statement bodies to be
+enclosed in braces and clang-format is supposed to be better so try
+those next time.
+
+Roadmap
+=======
+  * make pystone.py work - DONE
+  * make enough of internals work so can run python tests - DONE
+  * import python tests and write go test runner to run them
+  * make lots of them pass
+
+
+Exceptions
+==========
+
+panic/recover only within single modules (like compiler/parser)
+
+Polymorphism
+============
+
+  Want to try to retain I__XXX__ and M__XXX__ for speed
+
+  so first try
+
+  ok, I := obj.(.I__XXX__)
+  if ok {
+      res = I.M__XXX__(obj)
+  }
+  
+  However want to be able to look up "__XXX__" in dict
+
+  ok, res := obj.Type().Call0("__XXX__")
+  ok, res := obj.Type().Call1("__XXX__", a)
+  ok, res := obj.Type().Call2("__XXX__", a, b)
+  ok is method found
+  res is valid if found (or maybe NotImplemented)
+  
+  Call() looks up name in methods and if found calls it either C wise or py-wise
+
+  Calling C-wise is easy enough, but how to call py-wise?
+
+all together
+  
+  var ok bool
+  var res Object
+
+  if ok, I := obj.(.I__XXX__); ok {
+      res = I.M__XXX__(b)
+  } else ok, res = obj.Type().Call1("__XXX__", b); !ok {
+      res = NotImplemented
+  }
+
+ObjectType in *Type is probably redundant
+- except that Base can be nil
+
+Difference between gpython and cpython
+======================================
+
+Uses native types for some of the objects, eg String, Int, Tuple, StringDict
+
+The immutable types String, Int are passed by value. Tuple is an
+[]Object which is a reference type as is StringDict which is a
+map[string]Object. Note that Tuples can't appended to.
+
+Note that strings are kept as Go native utf-8 encoded strings.  This
+makes for a small amount of awkwardness when indexing etc, but makes
+life much easier interfacing with Go.
+
+List is a struct with a []Object in it so append can mutate the list.
+
+All other types are pointers to structures.
+
+Does not support threading, so no thread state or thread local
+variables as the intention is to support go routines and channels via
+the threading module.
+
+Attributes of built in types
+============================
+
+Use introspection to find methods of built in types and to find attributes
+
+When the built in type is created with TypeNew fill up the type Dict
+with the methods and data descriptors (which implement __get__
+and __set__ as appropriate)
+
+Introspect attributes by looking for `py:"args"` in the structure
+type.  If it is writable it has a ",w" flag `py:"args,w"` - we'll use
+the type of the structure member to convert the incoming arg, so if it
+is a Tuple() we'll call MakeTuple() on it, etc.  The attribute can
+also have help on it, eg `py:"__cause__,r,exception cause"`
+
+Introspect methods by looking at all public methods
+
+Transform the names, so that initial "M__" becomes "__" then lowercase
+the method. Only if the method matches one of the defined function types will it be exported.
+FIXME meta data for help would be nice?  How attache metadata to go function?
+
+Introspection idea
+==================
+
+	var method string
+	if strings.HasPrefix(key, "_") {
+		method = "M" + key
+	} else {
+		method = strings.Title(key)
+	}
+	fmt.Printf("*** looking for method %q (key %q)\n", method, key)
+	r := reflect.TypeOf(self)
+	if m, ok := r.MethodByName(method); ok {
+		fmt.Printf("*** m = %#v\n", m.Func)
+		fmt.Printf("*** type = %#v\n", m.Func.Type())
+
+		var fptr func(Object) Object
+
+		// fptr is a pointer to a function.
+		// Obtain the function value itself (likely nil) as a reflect.Value
+		// so that we can query its type and then set the value.
+		fn := reflect.ValueOf(fptr).Elem()
+
+		// Make a function of the right type.
+		v := reflect.MakeFunc(fn.Type(), m.Func)
+
+		// Assign it to the value fn represents.
+		fn.Set(v)
+
+		fmt.Printf("fptr = %v\n", fptr)
+
+	} else {
+		fmt.Printf("*** method not found\n")
+	}
+
+
+Parser
+======
+
+Used Python's Grammar file - converted into parser/grammar.y
+
+Used go tool yacc and a hand built lexer in parser/lexer.go
+
+DONE
+
+Go Module
+=========
+
+Implement go(), chan()
+
+Implement select() with
+
+http://golang.org/pkg/reflect/#Select
+
+Eg from the mailing list
+
+// timedReceive receives on channel (which can be a chan of any type), waiting
+// up to timeout.
+//
+// timeout==0 means do a non-blocking receive attempt. timeout < 0 means block
+// forever. Other values mean block up to the timeout.
+//
+// Returns (value, nil) on success, (nil, Timeout) on timeout, (nil, closeErr()) on close.
+//
+func timedReceive(channel interface{}, timeout time.Duration, closeErr func() error) (interface{}, error) {
+    cases := []reflect.SelectCase{
+        reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(channel)},
+    }
+    switch {
+    case timeout == 0: // Non-blocking receive
+        cases = append(cases, reflect.SelectCase{Dir: reflect.SelectDefault})
+    case timeout < 0: // Block forever, nothing to add
+    default: // Block up to timeout
+        cases = append(cases,
+            reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(time.After(timeout))})
+    }
+    chosen, recv, recvOk := reflect.Select(cases)
+    switch {
+    case chosen == 0 && recvOk:
+        return recv.Interface(), nil
+    case chosen == 0 && !recvOk:
+        return nil, closeErr()
+    default:
+        return nil, Timeout
+    }
+}
+
+
+
+My "Incoming()" function, and other places that use this pattern are now quite trivial, just a teeny bit of casting:
+
+func (c *Connection) Incoming(timeout time.Duration) (Endpoint, error) {
+    value, err := timedReceive(c.incoming, timeout, c.Error)
+    ep, _ := value.(Endpoint)
+    return ep, err
+}
