@@ -24,6 +24,7 @@ const executionTimeBuckets = 20
 var (
 	statusCounter     *prometheus.CounterVec
 	durationHistogram *prometheus.HistogramVec
+	endpointStarted   bool = false
 )
 
 // TelemetryClient contains the functions for Telemetry
@@ -44,13 +45,11 @@ type Telemetry struct {
 }
 
 // InitializeTelemetry initializes a TelemetryFactory client
-func InitializeTelemetry(subsystemName string, endpoint string, port int) *Telemetry {
+func InitializeTelemetry(subsystemName string) *Telemetry {
 
 	var telemetryConfig Telemetry = Telemetry{
 		NamespaceName: namespaceNameDefault,
 		SubsystemName: subsystemName,
-		Endpoint:      endpoint,
-		Port:          port,
 	}
 
 	// initialize global metrics if neccessary
@@ -91,10 +90,21 @@ func InitializeTelemetry(subsystemName string, endpoint string, port int) *Telem
 		prometheus.MustRegister(durationHistogram)
 	}
 
-	// start logging server
-	go telemetryConfig.startLoggingServer()
-
 	return &telemetryConfig
+}
+
+// StartTelemetryEndpoint starts the telemetry service endpoint
+func StartTelemetryEndpoint(endpoint string, port int) {
+	if !endpointStarted {
+		endpointStarted = true
+		go goStartLoggingEndpoint(endpoint, port)
+	}
+}
+
+// goStartTelemetryEndpoint is a go routine for starting the telemetry service endpoint
+func goStartLoggingEndpoint(endpoint string, port int) {
+	http.Handle(endpoint, promhttp.Handler())
+	http.ListenAndServe(fmt.Sprintf(":%d", port), nil)
 }
 
 // LogDuration logs the duration of an operation in seconds
@@ -103,19 +113,19 @@ func (t *Telemetry) LogDuration(componentName string, durationName string, durat
 	durationHistogram.WithLabelValues(componentName, durationName).Observe(durationInSecs)
 }
 
-// LogTraceByInstance logs a trace
+// LogTrace logs a trace
 func (t *Telemetry) LogTrace(componentName string, typeTrace string, message string) {
 	t.printLogging(componentName, "Trace", typeTrace, message)
 }
 
-// LogInfoByInstance logs an informational message
-func (t *Telemetry) LogInfoByInstance(componentName string, typeInfo string, message string) {
+// LogInfo logs an informational message
+func (t *Telemetry) LogInfo(componentName string, typeInfo string, message string) {
 	t.printLogging(componentName, "Info", typeInfo, message)
 	statusCounter.WithLabelValues(componentName, "Info", typeInfo, message).Inc()
 }
 
-// LogWarningByInstance logs a warning
-func (t *Telemetry) LogWarningByInstance(componentName string, typeWarning string, message string) {
+// LogWarning logs a warning
+func (t *Telemetry) LogWarning(componentName string, typeWarning string, message string) {
 	t.printLogging(componentName, "Warning", typeWarning, message)
 	statusCounter.WithLabelValues(componentName, "Warning", typeWarning, message).Inc()
 }
@@ -129,10 +139,4 @@ func (t *Telemetry) LogError(componentName string, typeError string, err error) 
 // printLogging prints the logging message
 func (t *Telemetry) printLogging(componentName string, level string, typeOf string, message string) {
 	log.Printf("%s|%s|%s|%s::%s - %s", t.NamespaceName, t.SubsystemName, componentName, level, typeOf, message)
-}
-
-// startLoggingServer starts the logging service
-func (t *Telemetry) startLoggingServer() {
-	http.Handle(t.Endpoint, promhttp.Handler())
-	http.ListenAndServe(fmt.Sprintf(":%d", t.Port), nil)
 }

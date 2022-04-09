@@ -24,6 +24,7 @@ import (
 	pysys "github.com/williammortl/Taylor/src/gpython/sys"
 	_ "github.com/williammortl/Taylor/src/gpython/time"
 	"github.com/williammortl/Taylor/src/gpython/vm"
+	"github.com/williammortl/Taylor/src/starlightd/pkg/plugins"
 )
 
 // Globals
@@ -56,6 +57,10 @@ func main() {
 
 		return
 	}
+	RunProgram(args)
+}
+
+func RunProgram(args []string) {
 	prog := args[0]
 	// fmt.Printf("Running %q\n", prog)
 
@@ -108,4 +113,26 @@ func main() {
 	// fmt.Printf("Return = %v\n", res)
 	_ = res
 
+}
+
+type InteropData struct{}
+
+// export InitPlugin
+func InitPlugin(taylor plugins.TaylorInterop) (*plugins.TaylorPluginInfo, plugins.TaylorPluginInterop) {
+	return &plugins.TaylorPluginInfo{
+		Name:            "GPython",
+		Version:         "0.0.3",
+		Language:        "Python",
+		LanguageVersion: "3.4.10",
+	}, &(InteropData{})
+}
+
+func (i *InteropData) RunFile(filename string, args string) (string, error) {
+	allArgs := []string{filename, args}
+	RunProgram(allArgs)
+	return "terminal", nil
+}
+
+func (i *InteropData) ResumeRun(filename string, offset uint64) error {
+	return fmt.Errorf("not supported")
 }
